@@ -26,6 +26,7 @@ async function run() {
 
     const db = client.db("legalease_db");
     const legalEaseCollection = db.collection("lawyers");
+    const commentsCollection = db.collection("comments");
 
     app.get("/lawyers", async (req, res) => {
   try {
@@ -92,6 +93,90 @@ app.get("/lawyers/:id", async (req, res) => {
       });
       res.json(result);
     });
+
+
+    //comment api get
+
+app.get('/comments/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid Lawyer ID format" });
+    }
+
+    const query = { lawyerId: new ObjectId(id) }; 
+    
+    const result = await commentsCollection.find(query).toArray();
+    
+    res.status(200).json(result); 
+  } catch (error) {
+    console.error("Error fetching comments:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+
+app.post('/comments', async (req, res) => {
+  try {
+    const { lawyerId, userId, author, date, text, rating } = req.body;
+
+    if (!lawyerId || !userId || !text) {
+      return res.status(400).json({ error: "Missing required comment fields." });
+    }
+
+    if (!ObjectId.isValid(lawyerId)) {
+      return res.status(400).json({ error: "Invalid Lawyer ID format." });
+    }
+
+    const newComment = {
+      lawyerId: new ObjectId(lawyerId), 
+      userId,                          
+      author,
+      date: date || new Date().toISOString().split('T')[0],
+      text,
+      rating: rating || 5
+    };
+
+    const result = await commentsCollection.insertOne(newComment);
+
+    res.status(201).json({
+      message: "Comment posted successfully",
+      insertedId: result.insertedId
+    });
+
+  } catch (error) {
+    console.error("Error inserting comment:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});           
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // await client.db("admin").command({ ping: 1 });
     console.log(
