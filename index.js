@@ -26,7 +26,9 @@ async function run() {
 
     const db = client.db("legalease_db");
     const legalEaseCollection = db.collection("lawyers");
+    const servicesCollection = db.collection("services");
     const commentsCollection = db.collection("comments");
+    const hiringCollection = db.collection("hiring");
 
     app.get("/lawyers", async (req, res) => {
   try {
@@ -85,17 +87,72 @@ async function run() {
 });
 
 app.get("/lawyers/:id", async (req, res) => {
-      const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-      const result = await legalEaseCollection.
-      findOne({
-        _id: new ObjectId(id),
-      });
-      res.json(result);
+    // Lawyer
+    const lawyer = await legalEaseCollection.findOne({
+      _id: new ObjectId(id),
     });
 
+    if (!lawyer) {
+      return res.status(404).send({ message: "Lawyer not found" });
+    }
 
-    //comment api get
+    const services = await servicesCollection
+      .find({ lawyerId: id })
+      .toArray();
+
+    res.send({
+      ...lawyer,
+      services,
+    });
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
+
+app.post("/lawyers", async (req, res) => {
+  try {
+    const lawyerData = req.body;
+    const result = await legalEaseCollection.insertOne(lawyerData);
+    res.status(201).send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.get("/lawyers/user/:userId", async (req, res) => {
+  console.log("Param:", req.params.userId);
+  
+  const { userId } = req.params;
+
+  const lawyer = await legalEaseCollection.findOne({ userId });
+
+  if (!lawyer) {
+    return res.status(404).send({ message: "Lawyer not found" });
+  }
+
+  res.send(lawyer);
+});
+
+app.patch("/lawyers/:userId", async (req, res) => {
+  const { userId } = req.params;
+
+  const result = await legalEaseCollection.updateOne(
+    { userId },
+    {
+      $set: req.body,
+    }
+  );
+
+  res.send(result);
+});
+
+
+
+    //comment api get       
 
 app.get('/comments/:id', async (req, res) => {
   try {
@@ -149,17 +206,225 @@ app.post('/comments', async (req, res) => {
     console.error("Error inserting comment:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
-});           
+}); 
 
 
+app.get('/comments/user/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    const result = await commentsCollection.aggregate([
+    
+      { $match: { userId: userId } },
+      {
+        $lookup: {
+          from: "lawyers",           
+          localField: "lawyerId",     
+          foreignField: "_id",       
+          as: "lawyerDetails"         
+        }
+      },
+      
+      { $unwind: { path: "$lawyerDetails", preserveNullAndEmptyArrays: true } },
+      
+      {
+        $project: {
+          _id: 1,
+          userId: 1,
+          date: 1,
+          text: 1,
+          rating: 1,
+          lawyerName: "$lawyerDetails.name",  
+          lawyerImage: "$lawyerDetails.image"  
+        }
+      },
+      
+      { $sort: { _id: -1 } }
+    ]).toArray();
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error with aggregate user comments:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 
+app.patch('/comments/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid Comment ID format" });
+    }
+
+    const filter = { _id: new ObjectId(id) };
+    const updatedDoc = {
+      $set: { 
+        text: req.body.text, 
+        rating: req.body.rating 
+      }
+    };
+
+    const result = await commentsCollection.updateOne(filter, updatedDoc);
+    
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({ error: "Comment not found or no changes made" });
+    }
+
+    res.status(200).json({ message: "Comment updated successfully", result });
+  } catch (error) {
+    console.error("Error updating comment:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 
+app.delete('/comments/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid Comment ID format" });
+    }
+
+    const query = { _id: new ObjectId(id) };
+    const result = await commentsCollection.deleteOne(query);
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Comment not found" });
+    }
+
+    res.status(200).json({ message: "Comment deleted successfully", result });
+  } catch (error) {
+    console.error("Error deleting comment:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 
+app.post("/hiring", async (req, res) => {
+  try {
+    const {
+      lawyerId,
+      lawyerName,
+      specialization,
+      rate,
+      userId,
+    } = req.body;
+
+    if (
+      !lawyerId ||
+      !lawyerName ||
+      !specialization ||
+      !rate ||
+      !userId
+    ) {
+      return res.status(400).json({
+        message: "All fields are required",
+      });
+    }
+
+    if (!ObjectId.isValid(lawyerId)) {
+      return res.status(400).json({
+        message: "Invalid Lawyer ID",
+      });
+    }
+
+    const hiring = {
+      lawyerId: new ObjectId(lawyerId),
+      lawyerName,
+      specialization,
+      rate,
+      userId,
+      hiringDate: new Date().toISOString().split("T")[0],
+      status: "pending",
+    };
+
+    const result = await hiringCollection.insertOne(hiring);
+
+    res.status(201).json({
+      message: "Hiring request submitted",
+      insertedId: result.insertedId,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+});
 
 
+app.get("/hiring/:userId", async (req, res) => {
+  const result = await hiringCollection
+    .find({
+      userId: req.params.userId,
+    })
+    .sort({ _id: -1 })
+    .toArray();
+
+  res.send(result);
+});
+
+app.get("/lawyer/hiring/:lawyerId", async (req, res) => {
+    console.log("Param:", req.params.lawyerId);
+  try {
+    const { lawyerId } = req.params;
+
+    if (!ObjectId.isValid(lawyerId)) {
+      return res.status(400).send({ message: "Invalid lawyer id" });
+    }
+
+    const result = await hiringCollection
+      .find({
+        lawyerId: new ObjectId(lawyerId),
+      })
+      .sort({ _id: -1 })
+      .toArray();
+
+
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ message: err.message });
+  }
+});
+
+app.patch("/hiring/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        message: "Invalid hiring id",
+      });
+    }
+
+    if (!["accepted", "rejected"].includes(status)) {
+      return res.status(400).send({
+        message: "Invalid status",
+      });
+    }
+
+    const result = await hiringCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      {
+        $set: {
+          status,
+        },
+      }
+    );
+
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({
+      message: err.message,
+    });
+  }
+});
 
 
 
