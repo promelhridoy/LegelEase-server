@@ -616,9 +616,47 @@ app.post('/create-payment-intent', async (req, res) => {
 });
 
 app.post('/payments', async (req, res) => {
-  const paymentInfo = req.body;
-  
-  res.send({ success: true, message: "Payment recorded successfully" });
+  try {
+    const paymentInfo = req.body; 
+    
+    const db = client.db("legalease_db");
+    const paymentsCollection = db.collection("payments"); 
+    const hiringCollection = db.collection("hiring");    
+    const { ObjectId } = require('mongodb');            
+
+    const insertResult = await paymentsCollection.insertOne(paymentInfo);
+
+    const filter = { _id: new ObjectId(paymentInfo.hiringId) };
+    const updateDoc = {
+      $set: {
+        paymentStatus: 'Paid'
+      }
+    };
+    const updateResult = await hiringCollection.updateOne(filter, updateDoc);
+
+    res.send({ 
+      success: true, 
+      message: "Payment recorded and hiring status updated successfully",
+      insertResult,
+      updateResult 
+    });
+    
+  } catch (error) {
+    res.status(500).send({ success: false, error: error.message });
+  }
+});
+
+
+app.get('/all-payments', async (req, res) => {
+  try {
+    const db = client.db("legalease_db");
+    const paymentsCollection = db.collection("payments");
+    
+    const result = await paymentsCollection.find().sort({ date: -1 }).toArray();
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
 });
 
 
