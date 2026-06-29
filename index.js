@@ -513,21 +513,31 @@ app.delete("/user/:id", async (req, res) => {
 
 app.get("/analytics", async (req, res) => {
   try {
-    const users = await usersCollection.countDocuments();
+    const db = client.db("legalease_db");
+    
+    const usersCollection = db.collection("user");
+    const legalEaseCollection = db.collection("lawyers");
+    const servicesCollection = db.collection("services");
+    const commentsCollection = db.collection("comments");
+    const hiringCollection = db.collection("hiring");
+    const paymentsCollection = db.collection("payments"); 
 
-    const lawyers = await legalEaseCollection.countDocuments();
+    const [users, lawyers, services, comments, hires] = await Promise.all([
+      usersCollection.countDocuments(),
+      legalEaseCollection.countDocuments(),
+      servicesCollection.countDocuments(),
+      commentsCollection.countDocuments(),
+      hiringCollection.countDocuments(),
+    ]);
 
-    const services = await servicesCollection.countDocuments();
-
-    const comments = await commentsCollection.countDocuments();
-
-    const hires = await hiringCollection.countDocuments();
-
-    const revenueAgg = await hiringCollection.aggregate([
+    const revenueAgg = await paymentsCollection.aggregate([
       {
         $group: {
           _id: null,
-          totalRevenue: { $sum: "$amount" },
+          totalRevenue: { 
+           
+            $sum: { $toDouble: "$amount" } 
+          },
         },
       },
     ]).toArray();
@@ -542,7 +552,9 @@ app.get("/analytics", async (req, res) => {
       hires,
       revenue,
     });
+    
   } catch (error) {
+    console.error("Analytics Error:", error.message);
     res.status(500).send({ error: "Server error" });
   }
 });
@@ -572,22 +584,30 @@ app.get("/analytics/hires", async (req, res) => {
 
 
 app.get("/analytics/revenue", async (req, res) => {
-  const result = await hiringCollection
-    .aggregate([
-      {
-        $group: {
-          _id: null,
-          totalRevenue: {
-            $sum: "$amount",
+  try {
+    const db = client.db("legalease_db");
+    const paymentsCollection = db.collection("payments"); // 📂 hiring এর বদলে payments কালেকশন ব্যবহার করা হলো
+
+    const result = await paymentsCollection
+      .aggregate([
+        {
+          $group: {
+            _id: null,
+            totalRevenue: {
+              // $sum এর ভেতর ডাটা টাইপ স্ট্রিং হলে সমস্যা এড়াতে $toDouble বা $toInt ব্যবহার করা নিরাপদ
+              $sum: { $toDouble: "$amount" }, 
+            },
           },
         },
-      },
-    ])
-    .toArray();
+      ])
+      .toArray();
 
-  res.send({
-    totalRevenue: result[0]?.totalRevenue || 0,
-  });
+    res.send({
+      totalRevenue: result[0]?.totalRevenue || 0,
+    });
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
 });
 
 
