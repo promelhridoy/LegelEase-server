@@ -366,9 +366,9 @@ async function run() {
 
     app.post("/hiring", verifyToken, userVerifyToken, async (req, res) => {
       try {
-        const { lawyerId, lawyerName, specialization, rate, userId } = req.body;
+        const { lawyerId, lawyerName, specialization, rate, userId, clientName } = req.body;
 
-        if (!lawyerId || !lawyerName || !specialization || !rate || !userId) {
+        if (!lawyerId || !lawyerName || !specialization || !rate || !userId || !clientName) {
           return res.status(400).json({
             message: "All fields are required",
           });
@@ -386,6 +386,7 @@ async function run() {
           specialization,
           rate,
           userId,
+          clientName,
           hiringDate: new Date().toISOString().split("T")[0],
           status: "pending",
         };
