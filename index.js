@@ -29,7 +29,7 @@ async function run() {
     const servicesCollection = db.collection("services");
     const commentsCollection = db.collection("comments");
     const hiringCollection = db.collection("hiring");
-    // const servicesCollection = db.collection("services");
+    const usersCollection = db.collection("user");
 
     app.get("/lawyers", async (req, res) => {
       try {
@@ -460,7 +460,6 @@ app.patch("/services/:id", async (req, res) => {
 });
 
 
-
 app.delete("/services/:id", async (req, res) => {
   const { id } = req.params;
 
@@ -472,12 +471,41 @@ app.delete("/services/:id", async (req, res) => {
 });
 
 
+//user api
 
+app.get("/user", async (req, res) => {
+  const result = await usersCollection
+    .find({
+      role: { $ne: "admin" },
+    })
+    .toArray();
 
+  res.send(result);
+});
 
+app.patch("/user/role/:id", async (req, res) => {
+  const { id } = req.params;
+  const { role } = req.body;
 
+  const result = await usersCollection.updateOne(
+    { _id: new ObjectId(id) },
+    {
+      $set: { role },
+    }
+  );
 
+  res.send(result);
+});
 
+app.delete("/user/:id", async (req, res) => {
+  const { id } = req.params;
+
+  const result = await usersCollection.deleteOne({
+    _id: new ObjectId(id),
+  });
+
+  res.send(result);
+});
 
 
 
