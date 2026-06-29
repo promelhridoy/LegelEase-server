@@ -11,7 +11,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 
-const PORT = 5000;
+const PORT = process.env.PORT;
 app.use(cors());
 app.use(express.json());
 
@@ -80,7 +80,7 @@ if(user.role !== "admin"){
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("legalease_db");
     const legalEaseCollection = db.collection("lawyers");
