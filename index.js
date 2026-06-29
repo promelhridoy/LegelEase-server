@@ -429,10 +429,10 @@ app.post("/services", async (req, res) => {
   }
 });
 
-
-
 app.get("/services/:lawyerId", async (req, res) => {
   const { lawyerId } = req.params;
+  console.log(lawyerId,"lawyerId");
+  
 
   const result = await servicesCollection
     .find({ lawyerId })
@@ -440,9 +440,6 @@ app.get("/services/:lawyerId", async (req, res) => {
 
   res.send(result);
 });
-
-
-
 
 
 app.patch("/services/:id", async (req, res) => {
