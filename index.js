@@ -507,13 +507,86 @@ app.delete("/user/:id", async (req, res) => {
   res.send(result);
 });
 
+//Analytics Overview API
+
+app.get("/analytics", async (req, res) => {
+  try {
+    const users = await usersCollection.countDocuments();
+
+    const lawyers = await legalEaseCollection.countDocuments();
+
+    const services = await servicesCollection.countDocuments();
+
+    const comments = await commentsCollection.countDocuments();
+
+    const hires = await hiringCollection.countDocuments();
+
+    const revenueAgg = await hiringCollection.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$amount" },
+        },
+      },
+    ]).toArray();
+
+    const revenue = revenueAgg[0]?.totalRevenue || 0;
+
+    res.send({
+      users,
+      lawyers,
+      services,
+      comments,
+      hires,
+      revenue,
+    });
+  } catch (error) {
+    res.status(500).send({ error: "Server error" });
+  }
+});
+
+app.get("/analytics/users", async (req, res) => {
+  const totalUsers = await usersCollection.countDocuments({
+    role: "user",
+  });
+
+  res.send({ totalUsers });
+});
+
+app.get("/analytics/lawyers", async (req, res) => {
+  const totalLawyers = await usersCollection.countDocuments({
+    role: "lawyer",
+  });
+
+  res.send({ totalLawyers });
+});
 
 
+app.get("/analytics/hires", async (req, res) => {
+  const totalHires = await hiringCollection.countDocuments();
+
+  res.send({ totalHires });
+});
 
 
+app.get("/analytics/revenue", async (req, res) => {
+  const result = await hiringCollection
+    .aggregate([
+      {
+        $group: {
+          _id: null,
+          totalRevenue: {
+            $sum: "$amount",
+          },
+        },
+      },
+    ])
+    .toArray();
 
-
-
+  res.send({
+    totalRevenue: result[0]?.totalRevenue || 0,
+  });
+});
 
 
     // await client.db("admin").command({ ping: 1 });
