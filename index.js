@@ -6,6 +6,8 @@ dotenv.config();
 
 const uri = process.env.MONGO_DB_URI;
 
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
 const app = express();
 
 const PORT = 5000;
@@ -586,6 +588,37 @@ app.get("/analytics/revenue", async (req, res) => {
   res.send({
     totalRevenue: result[0]?.totalRevenue || 0,
   });
+});
+
+
+
+
+
+app.post('/create-payment-intent', async (req, res) => {
+  try {
+    const { fee } = req.body; 
+   
+    const amount = Math.round(fee * 100); 
+
+   
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amount,
+      currency: 'usd', 
+      payment_method_types: ['card'],
+    });
+
+    res.send({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
+
+app.post('/payments', async (req, res) => {
+  const paymentInfo = req.body;
+  
+  res.send({ success: true, message: "Payment recorded successfully" });
 });
 
 
