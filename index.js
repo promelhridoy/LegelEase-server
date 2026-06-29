@@ -2,6 +2,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const { createRemoteJWKSet, jwtVerify} = require('jose-cjs');
 dotenv.config();
 
 const uri = process.env.MONGO_DB_URI;
@@ -21,6 +22,61 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
+)
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req?.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer")) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+ 
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    req.user = payload
+    // console.log(payload);
+    next();
+  } catch (error) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+  
+};
+
+const userVerifyToken = async (req, res, next) => {
+ const user = req.user;
+//  console.log("user verify", user);
+if(user.role !== "user"){
+  return res.status(403).json({ message: "Forbidden" });
+}
+ next()
+ 
+};
+const lawyerVerifyToken = async (req, res, next) => {
+ const user = req.user;
+//  console.log("user verify", user);
+if(user.role !== "lawyer"){
+  return res.status(403).json({ message: "Forbidden" });
+}
+ next()
+ 
+};
+const adminVerifyToken = async (req, res, next) => {
+ const user = req.user;
+//  console.log("user verify", user);
+if(user.role !== "admin"){
+  return res.status(403).json({ message: "Forbidden" });
+}
+ next()
+ 
+};
+
 
 async function run() {
   try {
@@ -110,7 +166,7 @@ async function run() {
       }
     });
 
-    app.post("/lawyers", async (req, res) => {
+    app.post("/lawyers",verifyToken, async (req, res) => {
       try {
         const lawyerData = req.body;
         const result = await legalEaseCollection.insertOne(lawyerData);
@@ -134,7 +190,7 @@ async function run() {
       res.send(lawyer);
     });
 
-    app.patch("/lawyers/:userId", async (req, res) => {
+    app.patch("/lawyers/:userId",verifyToken, async (req, res) => {
       const { userId } = req.params;
 
       const result = await legalEaseCollection.updateOne(
@@ -168,7 +224,7 @@ async function run() {
       }
     });
 
-    app.post("/comments", async (req, res) => {
+    app.post("/comments", verifyToken, userVerifyToken,  async (req, res) => {
       try {
         const { lawyerId, userId, author, date, text, rating } = req.body;
 
@@ -203,7 +259,7 @@ async function run() {
       }
     });
 
-    app.get("/comments/user/:userId", async (req, res) => {
+    app.get("/comments/user/:userId", verifyToken, async (req, res) => {
       try {
         const userId = req.params.userId;
 
@@ -249,7 +305,7 @@ async function run() {
       }
     });
 
-    app.patch("/comments/:id", async (req, res) => {
+    app.patch("/comments/:id", verifyToken, async (req, res) => {
       try {
         const id = req.params.id;
 
@@ -282,7 +338,7 @@ async function run() {
       }
     });
 
-    app.delete("/comments/:id", async (req, res) => {
+    app.delete("/comments/:id", verifyToken, async (req, res) => {
       try {
         const id = req.params.id;
 
@@ -308,7 +364,7 @@ async function run() {
 
     //hiring api
 
-    app.post("/hiring", async (req, res) => {
+    app.post("/hiring", verifyToken, userVerifyToken, async (req, res) => {
       try {
         const { lawyerId, lawyerName, specialization, rate, userId } = req.body;
 
@@ -348,7 +404,7 @@ async function run() {
       }
     });
 
-    app.get("/hiring/:userId", async (req, res) => {
+    app.get("/hiring/:userId", verifyToken, async (req, res) => {
       const result = await hiringCollection
         .find({
           userId: req.params.userId,
@@ -359,7 +415,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/lawyer/hiring/:lawyerId", async (req, res) => {
+    app.get("/lawyer/hiring/:lawyerId", verifyToken, lawyerVerifyToken, async (req, res) => {
       console.log("Param:", req.params.lawyerId);
       try {
         const { lawyerId } = req.params;
@@ -381,7 +437,7 @@ async function run() {
       }
     });
 
-    app.patch("/hiring/:id", async (req, res) => {
+    app.patch("/hiring/:id", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
         const { status } = req.body;
@@ -419,7 +475,7 @@ async function run() {
 
     //services api 
 
-app.post("/services", async (req, res) => {
+app.post("/services", verifyToken, lawyerVerifyToken, async (req, res) => {
   try {
     const service = req.body;
 
@@ -444,7 +500,7 @@ app.get("/services/:lawyerId", async (req, res) => {
 });
 
 
-app.patch("/services/:id", async (req, res) => {
+app.patch("/services/:id", verifyToken, lawyerVerifyToken, async (req, res) => {
   const { id } = req.params;
 
   const updatedData = req.body;
@@ -462,7 +518,7 @@ app.patch("/services/:id", async (req, res) => {
 });
 
 
-app.delete("/services/:id", async (req, res) => {
+app.delete("/services/:id", verifyToken, lawyerVerifyToken, async (req, res) => {
   const { id } = req.params;
 
   const result = await servicesCollection.deleteOne({
@@ -559,7 +615,7 @@ app.get("/analytics", async (req, res) => {
   }
 });
 
-app.get("/analytics/users", async (req, res) => {
+app.get("/analytics/users", verifyToken, adminVerifyToken, async (req, res) => {
   const totalUsers = await usersCollection.countDocuments({
     role: "user",
   });
@@ -567,7 +623,7 @@ app.get("/analytics/users", async (req, res) => {
   res.send({ totalUsers });
 });
 
-app.get("/analytics/lawyers", async (req, res) => {
+app.get("/analytics/lawyers", verifyToken, adminVerifyToken, async (req, res) => {
   const totalLawyers = await usersCollection.countDocuments({
     role: "lawyer",
   });
@@ -576,17 +632,17 @@ app.get("/analytics/lawyers", async (req, res) => {
 });
 
 
-app.get("/analytics/hires", async (req, res) => {
+app.get("/analytics/hires", verifyToken, adminVerifyToken, async (req, res) => {
   const totalHires = await hiringCollection.countDocuments();
 
   res.send({ totalHires });
 });
 
 
-app.get("/analytics/revenue", async (req, res) => {
+app.get("/analytics/revenue", verifyToken, adminVerifyToken, async (req, res) => {
   try {
     const db = client.db("legalease_db");
-    const paymentsCollection = db.collection("payments"); // 📂 hiring এর বদলে payments কালেকশন ব্যবহার করা হলো
+    const paymentsCollection = db.collection("payments"); 
 
     const result = await paymentsCollection
       .aggregate([
@@ -594,7 +650,7 @@ app.get("/analytics/revenue", async (req, res) => {
           $group: {
             _id: null,
             totalRevenue: {
-              // $sum এর ভেতর ডাটা টাইপ স্ট্রিং হলে সমস্যা এড়াতে $toDouble বা $toInt ব্যবহার করা নিরাপদ
+              
               $sum: { $toDouble: "$amount" }, 
             },
           },
@@ -609,9 +665,6 @@ app.get("/analytics/revenue", async (req, res) => {
     res.status(500).send({ error: error.message });
   }
 });
-
-
-
 
 
 app.post('/create-payment-intent', async (req, res) => {
